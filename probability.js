@@ -56,7 +56,12 @@ $(document).ready(function () {
         e.preventDefault();
 
         cardTypes.removeCardType();
+        updateNumbers();
+        calculate();
     });
+    
+    updateNumbers();
+    calculate();
 });
 
 function numberInputChange(e) {
@@ -120,19 +125,25 @@ function updateNumbers() {
         $("#hand-size").css("border-color", "");
     }
 
-    var failHand = miscAmt < miscMax;
-    for (var i = 0; i <= cardTypes.count; i++) {
-        $("#card-type-" + i + "-min").css("border-color", failHand ? "red" : "");
+    var cardTypeMinBorderColors = Array(cardTypes.count + 1);
+    var failHand = false; //miscAmt < miscMax;
+    // this seems to be an unnecessary error (as it does not allow you to have), but we'll log it in case something unexpected breaks
+    if(miscAmt < miscMax) {
+        console.log(`Note: This hand used to fail, since miscAmt (${miscAmt}) is less than miscMax (${miscMax})`);
     }
+    // for (var i = 0; i <= cardTypes.count; i++) {
+        // cardTypeMinBorderColors[i] = failHand ? "red" : "";
+    // }
 
     var maxMinFail = false;
     for (var i = 0; i <= cardTypes.count; i++) {
+        var maxMinFailBorderColor = "";
         if (getCardMin(i) > getCardMax(i)) {
             maxMinFail = true;
-            $("#card-type-" + i + "-min").css("border-color", "red");
-        } else {
-            $("#card-type-" + i + "-min").css("border-color", "");
+            maxMinFailBorderColor = "red";
         }
+        cardTypeMinBorderColors[i] = cardTypeMinBorderColors[i] || maxMinFailBorderColor;
+        $("#card-type-" + i + "-min").css("border-color", cardTypeMinBorderColors[i]);
     }
 
     if (miscAmt < 0 || miscMax < 0 || maxError || getHandSize() > getDeckSize() || failHand || maxMinFail) {

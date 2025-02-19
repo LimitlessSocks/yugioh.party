@@ -1,11 +1,26 @@
-var cardTypes;
+var cardTypes, SessionState;
+var SESSION_STORAGE_KEY = "sock/yugioh.party";
+var DEFAULT_SESSION_STATE = {
+    cardTypeCount: 1,
+    deckSize: 40,
+    handSize: 5,
+    cardTypeValues: [
+        ["", "", "", ""],
+    ],
+};
 
 $(document).ready(function () {
+    var SessionState = DEFAULT_SESSION_STATE;
+    sessionStorage[SESSION_STORAGE_KEY] = sessionStorage[SESSION_STORAGE_KEY] || JSON.stringify(SessionState);
+    SessionState = JSON.parse(sessionStorage[SESSION_STORAGE_KEY]);
+    
     cardTypes = new CardTypes();
+    cardTypes.syncFromState(SessionState);
 
     $("#deck-size").on("change paste keypress", numberInputChange);
     $("#hand-size").on("change paste keypress", numberInputChange);
 
+    $("body").on("change paste keypress", ".card-types-name", updateSessionStorage);
     $("body").on("change paste keypress", ".card-types-amt", numberInputChange);
     $("body").on("change paste keypress", ".card-types-min", numberInputChange);
     $("body").on("change paste keypress", ".card-types-max", numberInputChange);
@@ -50,6 +65,7 @@ $(document).ready(function () {
         e.preventDefault();
 
         cardTypes.addCardType();
+        updateSessionStorage();
     });
 
     $("#card-types-sub-button").click(function (e) {
@@ -58,6 +74,15 @@ $(document).ready(function () {
         cardTypes.removeCardType();
         updateNumbers();
         calculate();
+        updateSessionStorage();
+    });
+    
+    $("#card-types-reset-button").click(function (e) {
+        e.preventDefault();
+        
+        SessionState = DEFAULT_SESSION_STATE;
+        cardTypes.syncFromState(SessionState);
+        updateSessionStorage();
     });
     
     updateNumbers();
@@ -151,6 +176,10 @@ function updateNumbers() {
     } else {
         valid = true;
     }
+    
+    if (valid) {
+        updateSessionStorage();
+    }
 
     setMiscAmt(miscAmt);
     setMiscMax(miscMax);
@@ -233,6 +262,15 @@ function setMiscMax(val) {
     $("#misc-max").text(val);
 }
 
+function getCardName(index) {
+    var ret = $("#card-type-" + index + "-name").val();
+    // if (ret === "") {
+        // ret = "Card Name";
+    // }
+
+    return ret;
+}
+
 function getCardAmt(index) {
     var ret = $("#card-type-" + index + "-amt").val();
     if (ret === "") {
@@ -258,6 +296,43 @@ function getCardMax(index) {
     }
 
     return parseInt(ret, 10);
+}
+
+function getCardAmtRaw(index) {
+    return $("#card-type-" + index + "-amt").val();
+}
+
+function getCardMinRaw(index) {
+    return $("#card-type-" + index + "-min").val();
+}
+
+function getCardMaxRaw(index) {
+    return $("#card-type-" + index + "-max").val();
+}
+
+function setCardName(index, newName) {
+    $("#card-type-" + index + "-name").val(newName);
+    
+    return newName;
+}
+
+function setCardAmt(index, newAmt) {
+    console.log("setting card amt", index, "to", newAmt);
+    $("#card-type-" + index + "-amt").val(newAmt);
+
+    return newAmt;
+}
+
+function setCardMin(index, newMin) {
+    $("#card-type-" + index + "-min").val(newMin);
+
+    return newMin;
+}
+
+function setCardMax(index, newMax) {
+    $("#card-type-" + index + "-max").val(newMax);
+
+    return newMax;
 }
 
 var valid = true;
@@ -381,7 +456,7 @@ function choose(n, k) {
 }
 
 function CardTypes() {
-    this.count = 0;
+    this.count = 0; // count of additional inputs
 
     this.addCardType = function () {
         this.count++;
@@ -400,4 +475,51 @@ function CardTypes() {
             $("#card-types-sub-button").attr("disabled", true);
         }
     }
+    
+    this.syncFromState = function (state) {
+        var targetCount = state.cardTypeCount - 1;
+        while (this.count < targetCount) {
+            this.addCardType();
+        }
+        while (this.count > targetCount) {
+            this.removeCardType();
+        }
+        for (var i = 0; i <= this.count; i++) {
+            var row = state.cardTypeValues[i];
+            setCardName(i, row[0]);
+            setCardAmt(i,  row[1]);
+            setCardMin(i,  row[2]);
+            setCardMax(i,  row[3]);
+        }
+    };
+    
+    this.getCardTypeValues = function () {
+        var cardTypeValues = Array(this.count + 1);
+        for (var i = 0; i <= this.count; i++) {
+            cardTypeValues[i] = [
+                getCardName(i),
+                getCardAmtRaw(i),
+                getCardMinRaw(i),
+                getCardMaxRaw(i),
+            ];
+        }
+        return cardTypeValues;
+    };
+    
+    this.toSaveState = function () {
+        // technically bad practice since this function is responsible for gathering information from other places but whatever
+        
+        return {
+            cardTypeCount: this.count + 1,
+            deckSize: getDeckSize(),
+            handSize: getHandSize(),
+            cardTypeValues: this.getCardTypeValues(),
+        };
+    };
+}
+
+// i'm not a fan of bootstrapped functions like this, but i guess i'll follow the "style"
+function updateSessionStorage () {
+    SessionState = cardTypes.toSaveState();
+    sessionStorage[SESSION_STORAGE_KEY] = JSON.stringify(SessionState);
 }

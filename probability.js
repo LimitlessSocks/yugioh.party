@@ -144,7 +144,7 @@ function waitForDefined(varName, params) {
     });
 }
 
-waitForDefined("Chart").then(() => renderCardChart(0));
+// waitForDefined("Chart").then(() => renderCardChart(0));
 
 var cardChartState = {
     chart: null,
@@ -156,7 +156,7 @@ var cardChartState = {
     cardNames: null,
     canvas: null,
     reset() {
-        this.chart.destroy();
+        this.chart?.destroy();
         this.chart = this.focus = this.originalObject = null;
         $(this.canvas).toggle(false);
     },
@@ -202,7 +202,7 @@ var cardChartState = {
                 max: () => cardChartState.deckSize,
                 title: {
                     display: true,
-                    text: () => `# of ${cardChartState.cardNames[0]}`,
+                    text: () => `# of ${cardChartState.cardNames[cardChartState.focus]}`,
                 },
             },
             y: {
@@ -266,9 +266,9 @@ var cardChartState = {
                         xMin: (context, options) => cardChartState.originalObject.amt - cardChartState.originalObject.min,
                         xMax: () => cardChartState.originalObject.amt - cardChartState.originalObject.min,
                         borderColor: () => {
-                            var xMain = cardChartState.datasets[0];
+                            var xLast = cardChartState.datasets.at(-1);
                             var xIndex = cardChartState.originalObject.amt - cardChartState.originalObject.min;
-                            return colorForChance(xMain.data[xIndex] / 100);
+                            return colorForChance(xLast.data[xIndex] / 100);
                         },
                         // borderColor: colorForChance(xMain[originalObject.amt - originalObject.min] / 100),
                         borderWidth: 2,
@@ -280,6 +280,23 @@ var cardChartState = {
         },
     },
 };
+
+function sum(arr) { return arr.reduce((p, c) => p + c, 0); }
+
+function englishListJoin(items) {
+    if(items.length === 1) {
+        return items[0];
+    }
+    if(items.length === 2) {
+        return `${items[0]} and ${items[1]}`;
+    }
+    return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
+}
+
+function listWithoutIndex(list, idx) {
+    return list.slice(0, idx).concat(list.slice(idx + 1));
+}
+
 async function renderCardChart(id) {
     var deckSize = getDeckSize();
     var handSize = getHandSize();
@@ -288,7 +305,7 @@ async function renderCardChart(id) {
     var params = { deckSize: deckSize, handSize: handSize };
     var cardNames = objects.map((_, i) => getCardName(i) || `Card #${i + 1}`);
     
-    var baseObjects = objects.slice(0, id).concat(objects.slice(id + 1));
+    var baseObjects = listWithoutIndex(objects, id);
     var baseRate = calculateNoUI(baseObjects, params);
     
     var originalObject = objects[id];
@@ -304,16 +321,18 @@ async function renderCardChart(id) {
     var xMain = [];
     var xRelative = baseObjects.length === 0 ? null : [];
     
-    for(var i = originalObject.min; i <= deckSize; i++) {
+    var maxOccupancy = deckSize - sum(baseObjects.map(obj => obj.amt));
+    for(var i = originalObject.min; i <= maxOccupancy; i++) {
         objects[id] = {
             amt: i,
             min: originalObject.min,
             max: originalObject.amt === originalObject.max ? i : originalObject.max,
         };
         var amount = calculateNoUI(objects, params);
-        if(amount > baseRate) {
-            break;
-        }
+        console.log(i,amount,baseRate);
+        // if(amount > baseRate) {
+            // break;
+        // }
         amount *= 100;
         y.push(i);
         xMain.push(amount);
@@ -326,7 +345,8 @@ async function renderCardChart(id) {
     console.log({y,xMain,xRelative});
     var datasets = [
         {
-            label: `Chance of drawing ${cardNames[0]}`,
+            label: `Chance of opening this hand`,
+            // label: `Chance of drawing ${englishListJoin(cardNames)}`,
             data: xMain,
         },
     ];
@@ -334,7 +354,7 @@ async function renderCardChart(id) {
     // TODO: do not hardcode cardNames[0] and cardNames[1]
     if(xRelative) {
         datasets.push({
-            label: `Chance ${cardNames[1]} has targets`,
+            label: `Chance ${englishListJoin(listWithoutIndex(cardNames, id))} ${cardNames.length == 2 ? "has" : "have"} targets`,
             data: xRelative,
         });
     }
@@ -686,8 +706,8 @@ function calculateNoUI(objects, params) {
     params = Object.assign({}, params);
     params.verbose = params.verbose || false;
     if (typeof params.miscAmt === "undefined") {
-        params.miscAmt = params.deckSize - objects.map(obj => obj.amt).reduce((a, c) => a + c, 0);
-        params.miscMax = params.handSize - objects.map(obj => obj.min).reduce((a, c) => a + c, 0);
+        params.miscAmt = params.deckSize - sum(objects.map(obj => obj.amt));
+        params.miscMax = params.handSize - sum(objects.map(obj => obj.min));
     }
     if (params.miscMax === 0 && params.deckSize === params.handSize) {
         return 1;

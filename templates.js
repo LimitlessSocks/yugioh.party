@@ -2,8 +2,9 @@ var Templates = {
     cardType: function(count) {
         return `
                                 <div class="form-group" id="card-type-${count}-container">
-                                    <div class="col-xs-6">
-                                        <input class="col-xs-6 form-control card-types-input card-types-name" id="card-type-${count}-name" placeholder="Card Name"/>
+                                    <button id="card-options-${count}" class="btn btn-default col-xs-offset-1 col-xs-1 cards-options-button">☰</button>
+                                    <div class="col-xs-4">
+                                        <input class="col-xs-4 form-control card-types-input card-types-name" id="card-type-${count}-name" placeholder="Card Name"/>
                                     </div>
                                     <div class="col-xs-2">
                                         <input type="text" class="form-control number-input card-types-amt" id="card-type-${count}-amt" placeholder="3">

@@ -85,9 +85,36 @@ $(document).ready(function () {
         updateSessionStorage();
     });
     
+    $("#card-options-0").click(cardOptionsClick);
+    
     updateNumbers();
     calculate();
 });
+
+function cardOptionsClick(e) {
+    e.preventDefault();
+    var id = parseInt(this.id.slice("card-options-".length), 10);
+    var deckSize = getDeckSize();
+    var handSize = getHandSize();
+    
+    var objects = getCardAmounts();
+    var params = { deckSize: deckSize, handSize: handSize };
+    
+    var baseObjects = objects.slice(0, id).concat(objects.slice(id + 1));
+    var baseRate = calculateNoUI(baseObjects, params);
+    
+    console.log({baseRate});
+    
+    for(var i = 1; i < deckSize; i++) {
+        objects[id] = { amt: i, min: 1, max: i };
+        var amount = calculateNoUI(objects, params);
+        if(amount > baseRate) {
+            break;
+        }
+        console.log(i, amount);
+        //TODO:
+    }
+}
 
 function numberInputChange(e) {
     e.preventDefault();
@@ -335,30 +362,36 @@ function setCardMax(index, newMax) {
     return newMax;
 }
 
+function getCardAmounts() {
+    var objects = [];
+    for (var i = 0; i <= cardTypes.count; i++) {
+        var obj = {
+            amt: getCardAmt(i),
+            min: getCardMin(i),
+            max: getCardMax(i)
+        };
+
+        objects.push(obj);
+    }
+    return objects;
+}
+
 var valid = true;
 function calculate() {
     if (!valid) {
         $("#percentage").html('<label style="color: red">Unable to calculate. Please fix the values.</label>');
     } else {
-        var objects = [];
-        for (var i = 0; i <= cardTypes.count; i++) {
-            var obj = {
-                amt: getCardAmt(i),
-                min: getCardMin(i),
-                max: getCardMax(i)
-            };
-
-            objects.push(obj);
-        }
-
-        var chance = 0;
-        if (getMiscMax() === 0 && getDeckSize() == getHandSize()) {
-            chance = 100;
-        } else {
-            var recursive = recursiveCalculate([], 0, objects);
-            chance = (recursive / choose(getDeckSize(), getHandSize())) * 100;
-            console.log(recursive);
-        }
+        var objects = getCardAmounts();
+        
+        var params = {
+            miscAmt: getMiscAmt(),
+            miscMax: getMiscMax(),
+            deckSize: getDeckSize(),
+            handSize: getHandSize(),
+            verbose: true,
+        };
+        var chance = calculateNoUI(objects, params);
+        chance *= 100;
 
         var color = ["red", "#ff9900", "#ffbf00", "green", "green"][Math.floor(chance / 25)];
 
@@ -366,10 +399,33 @@ function calculate() {
     }
 }
 
-function recursiveCalculate(currentHand, currentHandSize, objects) {
-    if (objects.length === 0 || currentHandSize >= getHandSize()) {
-        if (currentHandSize == getHandSize()) {
-            console.log("O: " + objects.length);
+// objects is an array of objects { amt:, min:, max: }
+// params is an object { deckSize:, handSize:, miscAmt:?, miscMax:?, verbose:? }
+function calculateNoUI(objects, params) {
+    params = Object.assign({}, params);
+    params.verbose = params.verbose || false;
+    if (typeof params.miscAmt === "undefined") {
+        params.miscAmt = params.deckSize - objects.map(obj => obj.amt).reduce((a, c) => a + c, 0);
+        params.miscMax = params.handSize - objects.map(obj => obj.min).reduce((a, c) => a + c, 0);
+    }
+    if (params.miscMax === 0 && params.deckSize === params.handSize) {
+        return 1;
+    }
+    else {
+        var recursive = recursiveCalculate([], 0, objects, params);
+        if (params.verbose) {
+            console.log(recursive);
+        }
+        return recursive / choose(params.deckSize, params.handSize);
+    }
+}
+
+function recursiveCalculate(currentHand, currentHandSize, objects, params) {
+    if (objects.length === 0 || currentHandSize >= params.handSize) {
+        if (currentHandSize == params.handSize) {
+            if (params.verbose) {
+                console.log("O: " + objects.length);
+            }
             var noChance = false;
             for (var i = 0; i < objects.length; i++) {
                 if (objects[i].min != 0) {
@@ -381,7 +437,7 @@ function recursiveCalculate(currentHand, currentHandSize, objects) {
             if (noChance) {
                 return 0;
             }
-        } else if (currentHandSize > getHandSize()) {
+        } else if (currentHandSize > params.handSize) {
             return 0;
         }
         
@@ -393,12 +449,14 @@ function recursiveCalculate(currentHand, currentHandSize, objects) {
             newChance *= choose(currentHand[i], currentHand[i + 1]);
         }
 
-        if (currentHandSize < getHandSize()) {
-            output += "(" + getMiscAmt() + "choose " + (getHandSize() - currentHandSize) + ") * ";
-            newChance *= choose(getMiscAmt(), getHandSize() - currentHandSize);
+        if (currentHandSize < params.handSize) {
+            output += "(" + params.miscAmt + "choose " + (params.handSize - currentHandSize) + ") * ";
+            newChance *= choose(params.miscAmt, params.handSize - currentHandSize);
         }
-
-        console.log(output.substring(0, output.length - 3));
+        
+        if (params.verbose) {
+            console.log(output.substring(0, output.length - 3));
+        }
         return newChance;
     }
 
@@ -410,9 +468,10 @@ function recursiveCalculate(currentHand, currentHandSize, objects) {
         currentHand.push(obj.amt);
         currentHand.push(i);
 
-        chance += recursiveCalculate(currentHand, currentHandSize + i, objects);
-        //console.log("N: " + chance);
-
+        chance += recursiveCalculate(currentHand, currentHandSize + i, objects, params);
+        // if (params.verbose) {
+            //console.log("N: " + chance);
+        // }
         currentHand.pop();
         currentHand.pop();
 
@@ -465,6 +524,7 @@ function CardTypes() {
         if (this.count > 0) {
             $("#card-types-sub-button").removeAttr("disabled");
         }
+        $(`#card-options-${this.count}`).click(cardOptionsClick);
     }
 
     this.removeCardType = function () {

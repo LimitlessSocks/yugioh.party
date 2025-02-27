@@ -20,7 +20,7 @@ $(document).ready(function () {
     $("#deck-size").on("change paste keypress", numberInputChange);
     $("#hand-size").on("change paste keypress", numberInputChange);
 
-    $("body").on("change paste keypress", ".card-types-name", updateSessionStorage);
+    $("body").on("input", ".card-types-name", cardNameChange);
     $("body").on("change paste keypress", ".card-types-amt", numberInputChange);
     $("body").on("change paste keypress", ".card-types-min", numberInputChange);
     $("body").on("change paste keypress", ".card-types-max", numberInputChange);
@@ -80,6 +80,8 @@ $(document).ready(function () {
     $("#card-types-reset-button").click(function (e) {
         e.preventDefault();
         
+        cardChartState.reset();
+        
         SessionState = DEFAULT_SESSION_STATE;
         cardTypes.syncFromState(SessionState);
         updateSessionStorage();
@@ -89,6 +91,13 @@ $(document).ready(function () {
     calculate();
 });
 
+function cardNameChange() {
+    if(cardChartState.chart) {
+        cardChartState.render();
+    }
+    updateSessionStorage();
+}
+
 function handleMenuClick(e) {
     e.preventDefault();
     var dataset = e.target.dataset;
@@ -96,36 +105,244 @@ function handleMenuClick(e) {
     var id = parseInt(dataset.id, 10);
     
     if (action === "alternatives") {
-        showCardOptions(id);
+        renderCardChart(id);
     }
     else {
         console.error("Unhandled action for expanded menu:", action, "Id:", id);
     }
 }
 
-function showCardOptions(id) {
+function waitForDefined(varName, params) {
+    params = Object.assign({
+        message: null,
+        pollRate: 500,
+        maxRetry: 20,
+    }, params);
+    return new Promise((resolve, reject) => {
+        if(window[varName]) {
+            resolve(true);
+            return;
+        }
+        
+        if(params.message) {
+            setMessageStatus(params.message, "purple");
+        }
+        
+        var attempts = 0;
+        var intervalID = setInterval(() => {
+            if(window[varName]) {
+                clearInterval(intervalID);
+                resolve(true);
+                return;
+            }
+            attempts++;
+            if(attempts >= params.maxRetry) {
+                clearInterval(intervalID);
+                resolve(false);
+            }
+        }, params.pollRate);
+    });
+}
+
+waitForDefined("Chart").then(() => renderCardChart(0));
+
+var cardChartState = {
+    chart: null,
+    focus: null,
+    originalObject: null,
+    deckSize: null,
+    y: null,
+    datasets: null,
+    cardNames: null,
+    canvas: null,
+    reset() {
+        this.chart.destroy();
+        this.chart = this.focus = this.originalObject = null;
+        $(this.canvas).toggle(false);
+    },
+    initialize(y, datasets) {
+        // console.log("owo??????", y);
+        // console.log("owo??????", datasets);
+        this.canvas = document.getElementById("card-graph");
+        this.chart = new Chart(this.canvas, {
+            type: "line",
+            data: {
+                labels: y,
+                datasets: datasets,
+            },
+            options: this.options,
+        });
+    },
+    update(y, datasets, params) {
+        this.focus = params.id ?? this.focus;
+        this.cardNames = params.cardNames ?? this.cardNames;
+        this.originalObject = params.originalObject ?? this.originalObject;
+        this.y = y;
+        this.datasets = datasets;
+        if(this.chart) {
+            this.chart.data.labels = y;
+            this.chart.data.datasets = datasets;
+            this.chart.update();
+        }
+        else {
+            cardChartState.initialize(y, datasets);
+            $(this.canvas).toggle(true);
+        }
+    },
+    render(id = null) {
+        return renderCardChart(id ?? this.focus);
+    },
+    options: {
+        animation: false,
+        clip: false,
+        responsive: true,
+        scales: {
+            x: {
+                min: 0,
+                max: () => cardChartState.deckSize,
+                title: {
+                    display: true,
+                    text: () => `# of ${cardChartState.cardNames[0]}`,
+                },
+            },
+            y: {
+                beginAtZero: true,
+                min: 0,
+                max: 100,
+                ticks: {
+                    callback: (value, index, ticks) => `${value}%`,
+                },
+            },
+        },
+        
+        plugins: {
+            tooltip: {
+                callbacks: {
+                    label: context => {
+                        let label = context.dataset.label || '';
+
+                        if (label) {
+                            label += ': ';
+                        }
+                        if (context.parsed.y !== null) {
+                            label += context.parsed.y.toFixed(2) + "%";
+                        }
+                        return label;
+                    },
+                },
+            },
+            annotation: {
+                annotations: {
+                    redBox: {
+                        type: "box",
+                        yMin: 0,
+                        yMax: 25,
+                        borderWidth: 0,
+                        backgroundColor: "rgba(255,0,0,0.3)",
+                    },
+                    orangeBox: {
+                        type: "box",
+                        yMin: 25,
+                        yMax: 50,
+                        borderWidth: 0,
+                        backgroundColor: "rgba(255,153,0,0.3)",
+                    },
+                    yellowBox: {
+                        type: "box",
+                        yMin: 50,
+                        yMax: 75,
+                        borderWidth: 0,
+                        backgroundColor: "rgba(255,191,0,0.3)",
+                    },
+                    greenBox: {
+                        type: "box",
+                        yMin: 75,
+                        yMax: 100,
+                        borderWidth: 0,
+                        backgroundColor: "rgba(0,255,0,0.3)",
+                    },
+                    userLine: {
+                        type: "line",
+                        xMin: (context, options) => cardChartState.originalObject.amt - cardChartState.originalObject.min,
+                        xMax: () => cardChartState.originalObject.amt - cardChartState.originalObject.min,
+                        borderColor: () => {
+                            var xMain = cardChartState.datasets[0];
+                            var xIndex = cardChartState.originalObject.amt - cardChartState.originalObject.min;
+                            return colorForChance(xMain.data[xIndex] / 100);
+                        },
+                        // borderColor: colorForChance(xMain[originalObject.amt - originalObject.min] / 100),
+                        borderWidth: 2,
+                        borderShadowColor: "rgba(0,0,255,0.7)",
+                        shadowBlur: 5,
+                    },
+                },
+            },
+        },
+    },
+};
+async function renderCardChart(id) {
     var deckSize = getDeckSize();
     var handSize = getHandSize();
     
     var objects = getCardAmounts();
     var params = { deckSize: deckSize, handSize: handSize };
+    var cardNames = objects.map((_, i) => getCardName(i) || `Card #${i + 1}`);
     
     var baseObjects = objects.slice(0, id).concat(objects.slice(id + 1));
     var baseRate = calculateNoUI(baseObjects, params);
     
     var originalObject = objects[id];
     
-    // console.log("Sim:", simulate(objects, params));
-    console.log({baseRate});
+    var success = await waitForDefined("Chart", { message: "Loading chart rendering..." });
+    
+    if(!success) {
+        setMessageStatus("Could not load chart rendering library.", "red");
+        return;
+    }
+    
+    var y = [];
+    var xMain = [];
+    var xRelative = baseObjects.length === 0 ? null : [];
+    
     for(var i = originalObject.min; i <= deckSize; i++) {
-        objects[id] = { amt: i, min: originalObject.min, max: i };
+        objects[id] = {
+            amt: i,
+            min: originalObject.min,
+            max: originalObject.amt === originalObject.max ? i : originalObject.max,
+        };
         var amount = calculateNoUI(objects, params);
         if(amount > baseRate) {
             break;
         }
-        console.log(i, amount);
-        //TODO:
+        amount *= 100;
+        y.push(i);
+        xMain.push(amount);
+        if(xRelative) {
+            xRelative.push(amount / baseRate);
+        }
     }
+    
+    // create the chart
+    console.log({y,xMain,xRelative});
+    var datasets = [
+        {
+            label: `Chance of drawing ${cardNames[0]}`,
+            data: xMain,
+        },
+    ];
+    
+    // TODO: do not hardcode cardNames[0] and cardNames[1]
+    if(xRelative) {
+        datasets.push({
+            label: `Chance ${cardNames[1]} has targets`,
+            data: xRelative,
+        });
+    }
+    
+    cardChartState.update(y, datasets, { id, cardNames, originalObject });
+    
+    // restore message, if we changed it
+    calculate();
 }
 
 function numberInputChange(e) {
@@ -222,8 +439,13 @@ function updateNumbers() {
 
     setMiscAmt(miscAmt);
     setMiscMax(miscMax);
-
-    calculate();
+    
+    if(valid && cardChartState.chart) {
+        cardChartState.render(); // calculates as part of its flow
+    }
+    else {
+        calculate();
+    }
 }
 
 function getDeckSize() {
@@ -388,10 +610,18 @@ function getCardAmounts() {
     return objects;
 }
 
+function setMessageStatus(message, color = "auto") {
+    $("#percentage").html(`<label style="color: ${color}">${message}</label>`);
+}
+
+function colorForChance(chance) {
+    return ["red", "#ff9900", "#ffbf00", "green", "green"][Math.floor(chance / 0.25)];
+}
+
 var valid = true;
 function calculate() {
     if (!valid) {
-        $("#percentage").html('<label style="color: red">Unable to calculate. Please fix the values.</label>');
+        setMessageStatus("Unable to calculate. Please fix the values.", "red");
     } else {
         var objects = getCardAmounts();
         
@@ -403,11 +633,10 @@ function calculate() {
             verbose: true,
         };
         var chance = calculateNoUI(objects, params);
-        chance *= 100;
+        var color = colorForChance(chance);
 
-        var color = ["red", "#ff9900", "#ffbf00", "green", "green"][Math.floor(chance / 25)];
-
-        $("#percentage").html('<label>You have a <span style="color: ' + color + '">' + chance.toFixed(2) + '</span>% chance to open this hand.</label>');
+        chance *= 100;        
+        setMessageStatus(`You have a <span style="color: ${color}">${chance.toFixed(2)}</span>% chance to open this hand.`);
     }
 }
 

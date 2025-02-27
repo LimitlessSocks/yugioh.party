@@ -9,6 +9,8 @@
         <link rel="stylesheet" type="text/css" href="./probability.css">
         <script src="./probability.js"></script>
         <script src="./templates.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8" async></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0" async></script>
         <meta charset="utf-8">
         <title>Yu-Gi-Oh Probability Calculator</title>
     </head>
@@ -152,6 +154,9 @@
                             <div>
                                 <button id="card-types-reset-button" class="btn btn-danger col-xs-2 col-xs-offset-9" style="margin-top: 10px;">Reset</button>
                             </div>
+                        </div>
+                        <div class="panel-body">
+                            <canvas id="card-graph" style="display: none;"></canvas>
                         </div>
                         <div class="panel-footer" id="percentage"><label>You have a <span style="color: green">100</span>% chance to open this hand.</label></div>
                     </div>

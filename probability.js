@@ -85,15 +85,25 @@ $(document).ready(function () {
         updateSessionStorage();
     });
     
-    $("#card-options-0").click(cardOptionsClick);
-    
     updateNumbers();
     calculate();
 });
 
-function cardOptionsClick(e) {
+function handleMenuClick(e) {
     e.preventDefault();
-    var id = parseInt(this.id.slice("card-options-".length), 10);
+    var dataset = e.target.dataset;
+    var action = dataset.action;
+    var id = parseInt(dataset.id, 10);
+    
+    if (action === "alternatives") {
+        showCardOptions(id);
+    }
+    else {
+        console.error("Unhandled action for expanded menu:", action, "Id:", id);
+    }
+}
+
+function showCardOptions(id) {
     var deckSize = getDeckSize();
     var handSize = getHandSize();
     
@@ -103,18 +113,19 @@ function cardOptionsClick(e) {
     var baseObjects = objects.slice(0, id).concat(objects.slice(id + 1));
     var baseRate = calculateNoUI(baseObjects, params);
     
-    console.log("Sim:", simulate(objects, params));
-    // console.log({baseRate});
-    /*
-    for(var i = 1; i < deckSize; i++) {
-        objects[id] = { amt: i, min: 1, max: i };
+    var originalObject = objects[id];
+    
+    // console.log("Sim:", simulate(objects, params));
+    console.log({baseRate});
+    for(var i = originalObject.min; i <= deckSize; i++) {
+        objects[id] = { amt: i, min: originalObject.min, max: i };
         var amount = calculateNoUI(objects, params);
         if(amount > baseRate) {
             break;
         }
         console.log(i, amount);
         //TODO:
-    }*/
+    }
 }
 
 function numberInputChange(e) {
@@ -150,17 +161,17 @@ function updateNumbers() {
     var handSize = getHandSize();
 
     var miscAmt = deckSize;
-    for (var i = 0; i <= cardTypes.count; i++) {
+    for (var i = 0; i < cardTypes.count; i++) {
         miscAmt -= getCardAmt(i);
     }
 
     var miscMax = handSize;
-    for (var i = 0; i <= cardTypes.count; i++) {
+    for (var i = 0; i < cardTypes.count; i++) {
         miscMax -= getCardMin(i);
     }
 
     var maxError = false;
-    for (var i = 0; i <= cardTypes.count; i++) {
+    for (var i = 0; i < cardTypes.count; i++) {
         var cardAmt = getCardAmt(i);
         var cardMax = getCardMax(i);
 
@@ -178,18 +189,18 @@ function updateNumbers() {
         $("#hand-size").css("border-color", "");
     }
 
-    var cardTypeMinBorderColors = Array(cardTypes.count + 1);
+    var cardTypeMinBorderColors = Array(cardTypes.count);
     var failHand = false; //miscAmt < miscMax;
     // this seems to be an unnecessary error (as it does not allow you to have), but we'll log it in case something unexpected breaks
     if(miscAmt < miscMax) {
         console.log(`Note: This hand used to fail, since miscAmt (${miscAmt}) is less than miscMax (${miscMax})`);
     }
-    // for (var i = 0; i <= cardTypes.count; i++) {
+    // for (var i = 0; i < cardTypes.count; i++) {
         // cardTypeMinBorderColors[i] = failHand ? "red" : "";
     // }
 
     var maxMinFail = false;
-    for (var i = 0; i <= cardTypes.count; i++) {
+    for (var i = 0; i < cardTypes.count; i++) {
         var maxMinFailBorderColor = "";
         if (getCardMin(i) > getCardMax(i)) {
             maxMinFail = true;
@@ -365,7 +376,7 @@ function setCardMax(index, newMax) {
 
 function getCardAmounts() {
     var objects = [];
-    for (var i = 0; i <= cardTypes.count; i++) {
+    for (var i = 0; i < cardTypes.count; i++) {
         var obj = {
             amt: getCardAmt(i),
             min: getCardMin(i),
@@ -435,7 +446,9 @@ function simulate(objects, params, N = 1000000) {
         }
     }
     
-    console.log(hits, N, hits/N);
+    // console.log(hits, N, hits/N);
+    
+    return hits / N;
 }
 
 // objects is an array of objects { amt:, min:, max: }
@@ -458,7 +471,6 @@ function calculateNoUI(objects, params) {
         if (params.verbose) {
             console.log(recursive);
         }
-        console.log("Divided amount:", params.deckSize, params.handSize, choose(params.deckSize, params.handSize));
         return recursive / choose(params.deckSize, params.handSize);
     }
 }
@@ -563,36 +575,40 @@ function choose(n, k) {
 }
 
 function CardTypes() {
-    this.count = 0; // count of additional inputs
+    this.count = 0;
 
     this.addCardType = function () {
-        this.count++;
-
         $("#card-types-container").append(Templates.cardType(this.count));
-        if (this.count > 0) {
+        $(`#card-options-${this.count} + ul a`).click(handleMenuClick);
+        
+        this.count++;
+        
+        if (this.count >= 2) {
             $("#card-types-sub-button").removeAttr("disabled");
         }
-        $(`#card-options-${this.count}`).click(cardOptionsClick);
     }
 
     this.removeCardType = function () {
-        $("#card-type-" + this.count + "-container").remove();
+        if (this.count === 0) {
+            return;
+        }
         this.count--;
+        $("#card-type-" + this.count + "-container").remove();
 
-        if (this.count < 1) {
+        if (this.count <= 1) {
             $("#card-types-sub-button").attr("disabled", true);
         }
     }
     
     this.syncFromState = function (state) {
-        var targetCount = state.cardTypeCount - 1;
+        var targetCount = state.cardTypeCount;
         while (this.count < targetCount) {
             this.addCardType();
         }
         while (this.count > targetCount) {
             this.removeCardType();
         }
-        for (var i = 0; i <= this.count; i++) {
+        for (var i = 0; i < this.count; i++) {
             var row = state.cardTypeValues[i];
             setCardName(i, row[0]);
             setCardAmt(i,  row[1]);
@@ -602,8 +618,8 @@ function CardTypes() {
     };
     
     this.getCardTypeValues = function () {
-        var cardTypeValues = Array(this.count + 1);
-        for (var i = 0; i <= this.count; i++) {
+        var cardTypeValues = Array(this.count);
+        for (var i = 0; i < this.count; i++) {
             cardTypeValues[i] = [
                 getCardName(i),
                 getCardAmtRaw(i),
@@ -618,7 +634,7 @@ function CardTypes() {
         // technically bad practice since this function is responsible for gathering information from other places but whatever
         
         return {
-            cardTypeCount: this.count + 1,
+            cardTypeCount: this.count,
             deckSize: getDeckSize(),
             handSize: getHandSize(),
             cardTypeValues: this.getCardTypeValues(),

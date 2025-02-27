@@ -238,28 +238,28 @@ var cardChartState = {
                         yMin: 0,
                         yMax: 25,
                         borderWidth: 0,
-                        backgroundColor: "rgba(255,0,0,0.3)",
+                        backgroundColor: colorForChance(0, 0.3),
                     },
                     orangeBox: {
                         type: "box",
                         yMin: 25,
                         yMax: 50,
                         borderWidth: 0,
-                        backgroundColor: "rgba(255,153,0,0.3)",
+                        backgroundColor: colorForChance(0.25, 0.3),
                     },
                     yellowBox: {
                         type: "box",
                         yMin: 50,
                         yMax: 75,
                         borderWidth: 0,
-                        backgroundColor: "rgba(255,191,0,0.3)",
+                        backgroundColor: colorForChance(0.50, 0.3),
                     },
                     greenBox: {
                         type: "box",
                         yMin: 75,
                         yMax: 100,
                         borderWidth: 0,
-                        backgroundColor: "rgba(0,255,0,0.3)",
+                        backgroundColor: colorForChance(0.75, 0.3),
                     },
                     userLine: {
                         type: "line",
@@ -634,8 +634,24 @@ function setMessageStatus(message, color = "auto") {
     $("#percentage").html(`<label style="color: ${color}">${message}</label>`);
 }
 
-function colorForChance(chance) {
-    return ["red", "#ff9900", "#ffbf00", "green", "green"][Math.floor(chance / 0.25)];
+// takes chance as a number between 0.0 and 1.0
+function colorForChance(chance, alpha = 1.0) {
+    var COLOR_PALETTE = [
+        `rgba(255, 0, 0, ${alpha})`, // 0 to <25
+        `rgba(255, 167, 0, ${alpha})`, // 25 to <50
+        `rgba(199, 189, 83, ${alpha})`, // 50 to <75
+        `rgba(44, 186, 0, ${alpha})`, // 75 to 100+
+    ];
+    var idx = Math.floor(chance * COLOR_PALETTE.length);
+    
+    if(idx >= COLOR_PALETTE.length) {
+        idx = COLOR_PALETTE.length - 1;
+    }
+    if(idx < 0) {
+        idx = 0;
+    }
+    
+    return COLOR_PALETTE[idx];
 }
 
 var valid = true;

@@ -103,8 +103,9 @@ function cardOptionsClick(e) {
     var baseObjects = objects.slice(0, id).concat(objects.slice(id + 1));
     var baseRate = calculateNoUI(baseObjects, params);
     
-    console.log({baseRate});
-    
+    console.log("Sim:", simulate(objects, params));
+    // console.log({baseRate});
+    /*
     for(var i = 1; i < deckSize; i++) {
         objects[id] = { amt: i, min: 1, max: i };
         var amount = calculateNoUI(objects, params);
@@ -113,7 +114,7 @@ function cardOptionsClick(e) {
         }
         console.log(i, amount);
         //TODO:
-    }
+    }*/
 }
 
 function numberInputChange(e) {
@@ -220,7 +221,7 @@ function getDeckSize() {
         ret = 0;
     }
 
-    return ret;
+    return parseInt(ret, 10);
 }
 
 function getHandSize() {
@@ -399,6 +400,44 @@ function calculate() {
     }
 }
 
+// https://stackoverflow.com/a/12646864/4119004
+function shuffleArray(array) {
+    for (let i = array.length - 1; i >= 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+}
+
+function simulate(objects, params, N = 1000000) {
+    var baseDeck = [];
+    objects.forEach((obj, objIndex) => {
+        for(let i = 0; i < obj.amt; i++) {
+            baseDeck.push(objIndex);
+        }
+    });
+    while(baseDeck.length < params.deckSize) {
+        baseDeck.push(-1);
+    }
+
+    var counts, hand, success, hits = 0;
+    
+    for(var i = 0; i < N; i++) {
+    
+        shuffleArray(baseDeck);
+        hand = baseDeck.slice(0, params.handSize);
+        counts = {};
+        hand.forEach(objIndex => counts[objIndex] = (counts[objIndex] || 0) + 1);
+        success = objects.every((obj, objIndex) =>
+            obj.min <= counts[objIndex] && counts[objIndex] <= obj.max);
+        
+        if(success) {
+            hits += 1;
+        }
+    }
+    
+    console.log(hits, N, hits/N);
+}
+
 // objects is an array of objects { amt:, min:, max: }
 // params is an object { deckSize:, handSize:, miscAmt:?, miscMax:?, verbose:? }
 function calculateNoUI(objects, params) {
@@ -411,11 +450,15 @@ function calculateNoUI(objects, params) {
     if (params.miscMax === 0 && params.deckSize === params.handSize) {
         return 1;
     }
+    // else if (params.miscAmt < 0) {
+        
+    // }
     else {
         var recursive = recursiveCalculate([], 0, objects, params);
         if (params.verbose) {
             console.log(recursive);
         }
+        console.log("Divided amount:", params.deckSize, params.handSize, choose(params.deckSize, params.handSize));
         return recursive / choose(params.deckSize, params.handSize);
     }
 }
@@ -445,13 +488,15 @@ function recursiveCalculate(currentHand, currentHandSize, objects, params) {
         var output = "";
 
         for (var i = 0; i < currentHand.length; i += 2) {
-            output += "(" + currentHand[i] + " choose " + currentHand[i + 1] + ") * ";
-            newChance *= choose(currentHand[i], currentHand[i + 1]);
+            var chosen = choose(currentHand[i], currentHand[i + 1]);
+            output += "(" + currentHand[i] + " choose " + currentHand[i + 1] + ` = ${chosen}) * `;
+            newChance *= chosen;
         }
 
         if (currentHandSize < params.handSize) {
-            output += "(" + params.miscAmt + "choose " + (params.handSize - currentHandSize) + ") * ";
-            newChance *= choose(params.miscAmt, params.handSize - currentHandSize);
+            var chosen = choose(params.miscAmt, params.handSize - currentHandSize);
+            output += "(" + params.miscAmt + " choose " + (params.handSize - currentHandSize) + ` = ${chosen}) * `;
+            newChance *= chosen;
         }
         
         if (params.verbose) {
@@ -509,7 +554,10 @@ function choose(n, k) {
         k = 0;
     if (k < 0)
         k = 0;
-    //if (k > n) k = n;
+    
+    if (k > n) {
+        return 0;
+    }
 
     return (factorial(n)) / (factorial(k) * factorial(n - k));
 }
